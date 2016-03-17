@@ -1,0 +1,86 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools" android:layout_width="match_parent"
+    android:layout_height="match_parent" android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    android:paddingBottom="@dimen/activity_vertical_margin" tools:context=".MainActivity"
+    android:id="@+id/mainLayout">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/textViewCurrentTempLabel"
+        android:text="Current Temperature:"
+        android:layout_below="@+id/textViewSetPointLabel"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_marginTop="18dp" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="-"
+        android:id="@+id/buttonSubtractDegree"
+        android:layout_marginTop="31dp"
+        android:layout_below="@+id/textViewCurrentTempLabel"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="+"
+        android:id="@+id/buttonAddDegree"
+        android:layout_alignTop="@+id/buttonSubtractDegree"
+        android:layout_toRightOf="@+id/textViewCurrentTempLabel"
+        android:layout_toEndOf="@+id/textViewCurrentTempLabel" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Set Point:"
+        android:id="@+id/textViewSetPointLabel"
+        android:layout_marginTop="28dp"
+        android:layout_below="@+id/textViewBluetoothStatusLabel"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:text="60.00 °C"
+        android:id="@+id/textViewSetPointValue"
+        android:layout_above="@+id/textViewCurrentTempLabel"
+        android:layout_alignLeft="@+id/textViewCurrentTempValue"
+        android:layout_alignStart="@+id/textViewCurrentTempValue" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:text="60.00 °C"
+        android:id="@+id/textViewCurrentTempValue"
+        android:layout_alignTop="@+id/textViewCurrentTempLabel"
+        android:layout_alignRight="@+id/buttonAddDegree"
+        android:layout_alignEnd="@+id/buttonAddDegree" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Bluetooth Status:"
+        android:id="@+id/textViewBluetoothStatusLabel"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="connected"
+        android:id="@+id/textViewBluetoothStatusValue"
+        android:layout_alignParentTop="true"
+        android:layout_alignRight="@+id/textViewCurrentTempValue"
+        android:layout_alignEnd="@+id/textViewCurrentTempValue" />
+
+</RelativeLayout>
