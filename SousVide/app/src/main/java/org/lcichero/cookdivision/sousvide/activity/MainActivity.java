@@ -42,7 +42,7 @@ public class MainActivity extends Activity {
     private TextView textViewBluetoothStatusValue;
     private TextView textViewCurrentTempValue;
     private TextView textViewSetPointValue;
-    private float currentTemp = 58F;
+    private float currentTemp = 00F;
     private float setPoint = 60F;
     private final String CELSIUS_DEGREE_NOTATION = " " + (char) 0x00B0 + "C";
 
