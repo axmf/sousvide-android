@@ -6,8 +6,8 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -17,17 +17,25 @@ import android.widget.Toast;
 import org.lcichero.cookdivision.sousvide.R;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-    private static final String TAG = "sousvide_bt";
-    private static String address = "00:12:08:20:08:04";
+    private static final String TAG = "SOUSVIDE_BT";
+    private static String btAddress = "00:12:08:20:08:04";
 
-    private BluetoothAdapter btAdapter = null;
-    private BluetoothSocket btSocket = null;
-    private OutputStream outStream = null;
+    private BluetoothAdapter mBluetoothAdapter;
+    private BluetoothSocket mmSocket;
+    private BluetoothDevice mmDevice;
+    private OutputStream mmOutputStream;
+    private InputStream mmInputStream;
+    private Thread workerThread;
+    byte[] readBuffer;
+    int readBufferPosition;
+    int counter;
+    volatile boolean stopWorker;
 
     private Button buttonSubtractDegree;
     private Button buttonAddDegree;
@@ -36,53 +44,7 @@ public class MainActivity extends Activity {
     private TextView textViewSetPointValue;
     private float currentTemp = 58F;
     private float setPoint = 60F;
-    private final String CELSIUS_DEGREE_NOTATION =  " " + (char) 0x00B0 + "C";
-
-    private void checkBTState() {
-        if (this.btAdapter == null) {
-            errorExit("Fatal Error", "Bluetooth not support");
-            return;
-        }
-        if (this.btAdapter.isEnabled()) {
-            Log.d(TAG, "...Bluetooth ON...");
-            return;
-        }
-        startActivityForResult(new Intent("android.bluetooth.adapter.action.REQUEST_ENABLE"), 1);
-    }
-
-    private BluetoothSocket createBluetoothSocket(BluetoothDevice paramBluetoothDevice)
-            throws IOException {
-        if (Build.VERSION.SDK_INT >= 10) {
-            try {
-                BluetoothSocket localBluetoothSocket = (BluetoothSocket) paramBluetoothDevice.getClass().getMethod("createInsecureRfcommSocketToServiceRecord", new Class[]{UUID.class}).invoke(paramBluetoothDevice, new Object[]{MY_UUID});
-                return localBluetoothSocket;
-            } catch (Exception localException) {
-                Log.e(TAG, "Could not create Insecure RFComm Connection", localException);
-            }
-        }
-        return paramBluetoothDevice.createRfcommSocketToServiceRecord(MY_UUID);
-    }
-
-    private void errorExit(String paramString1, String paramString2) {
-        Toast.makeText(getBaseContext(), paramString1 + " - " + paramString2, Toast.LENGTH_LONG).show();
-        finish();
-    }
-
-    private void sendData(String paramString) {
-        Object localObject = paramString.getBytes();
-        Log.d(TAG, "...Send data: " + paramString + "...");
-        try {
-            this.outStream.write((byte[]) localObject);
-            return;
-        } catch (IOException ioex) {
-            localObject = "In onResume() and an exception occurred during write: " + ioex.getMessage();
-            paramString = (String) localObject;
-            if (address.equals("00:00:00:00:00:00")) {
-                paramString = localObject + ".\n\nUpdate your server address from 00:00:00:00:00:00 to the correct address on line 35 in the java code";
-            }
-            errorExit("Fatal Error", paramString + ".\n\nCheck that the SPP UUID: " + MY_UUID.toString() + " exists on server.\n\n");
-        }
-    }
+    private final String CELSIUS_DEGREE_NOTATION = " " + (char) 0x00B0 + "C";
 
     public void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
@@ -92,77 +54,133 @@ public class MainActivity extends Activity {
         this.textViewBluetoothStatusValue = ((TextView) findViewById(R.id.textViewBluetoothStatusValue));
         this.textViewCurrentTempValue = ((TextView) findViewById(R.id.textViewCurrentTempValue));
         this.textViewSetPointValue = ((TextView) findViewById(R.id.textViewSetPointValue));
-        this.btAdapter = BluetoothAdapter.getDefaultAdapter();
-        checkBTState();
+
+        this.textViewCurrentTempValue.setText(String.format("%.2f", currentTemp) + CELSIUS_DEGREE_NOTATION);
+        this.textViewSetPointValue.setText(String.format("%.2f", setPoint) + CELSIUS_DEGREE_NOTATION);
+
         this.buttonSubtractDegree.setOnClickListener(new View.OnClickListener() {
             public void onClick(View paramAnonymousView) {
-                MainActivity.this.sendData("a");
-                Toast.makeText(MainActivity.this.getBaseContext(), "Subtracting 1 degree.", Toast.LENGTH_LONG).show();
+                try {
+                    setPoint--;
+                    textViewSetPointValue.setText(String.format("%.2f", setPoint) + CELSIUS_DEGREE_NOTATION);
+                    sendData(String.valueOf(String.format("%.2f", setPoint)));
+                } catch (IOException ex) {
+                    Log.e(TAG, ex.getMessage(), ex);
+                    Toast.makeText(MainActivity.this.getBaseContext(), "ERROR! Couldn't send data to SousVide device.", Toast.LENGTH_LONG).show();
+                }
             }
         });
         this.buttonAddDegree.setOnClickListener(new View.OnClickListener() {
             public void onClick(View paramAnonymousView) {
-                MainActivity.this.sendData("b");
-                Toast.makeText(MainActivity.this.getBaseContext(), "Adding 1 degree.", Toast.LENGTH_LONG).show();
+                try {
+                    setPoint++;
+                    textViewSetPointValue.setText(String.format("%.2f", setPoint) + CELSIUS_DEGREE_NOTATION);
+                    sendData(String.valueOf(String.format("%.2f", setPoint)));
+                } catch (IOException ex) {
+                    Log.e(TAG, ex.getMessage(), ex);
+                    Toast.makeText(MainActivity.this.getBaseContext(), "ERROR! Couldn't send data to SousVide device.", Toast.LENGTH_LONG).show();
+                }
             }
         });
     }
 
     public void onPause() {
         super.onPause();
-        Log.d(TAG, "...In onPause()...");
-        if (this.outStream != null) {
-        }
         try {
-            this.outStream.flush();
-        } catch (IOException localIOException1) {
-            for (; ; ) {
-                try {
-                    this.btSocket.close();
-                    return;
-                } catch (IOException localIOException2) {
-                    errorExit("Fatal Error", "In onPause() and failed to close socket." + localIOException2.getMessage() + ".");
-                }
-                localIOException1 = localIOException1;
-                errorExit("Fatal Error", "In onPause() and failed to flush output stream: " + localIOException1.getMessage() + ".");
+            if (this.mmOutputStream != null) {
+                this.mmOutputStream.flush();
+            }
+        } catch (IOException ex) {
+            Log.e(TAG, ex.getMessage(), ex);
+            Toast.makeText(MainActivity.this.getBaseContext(), "ERROR! 'onPause1'", Toast.LENGTH_LONG).show();
+            try {
+                this.mmSocket.close();
+            } catch (IOException ex2) {
+                Log.e(TAG, ex2.getMessage(), ex2);
+                Toast.makeText(MainActivity.this.getBaseContext(), "ERROR! 'onPause2'", Toast.LENGTH_LONG).show();
             }
         }
     }
 
     public void onResume() {
         super.onResume();
-        this.textViewBluetoothStatusValue.setText("disconnected");
-        this.textViewBluetoothStatusValue.setTextColor(Color.RED);
-        Log.d(TAG, "...onResume - try connect...");
-        BluetoothDevice localBluetoothDevice = this.btAdapter.getRemoteDevice(address);
-        try {
-            this.btSocket = createBluetoothSocket(localBluetoothDevice);
-            this.btAdapter.cancelDiscovery();
-            Log.d(TAG, "...Connecting...");
-            try {
-                this.btSocket.connect();
-                Log.d(TAG, "...Connection ok...");
-                Log.d(TAG, "...Create Socket...");
+        initializeBluetooth();
+        addBluetoothDataListener();
+    }
+
+    private void initializeBluetooth() {
+        this.mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (this.mBluetoothAdapter != null) {
+            if (this.mBluetoothAdapter.isEnabled()) {
+                Log.i(TAG, "Bluetooth is enabled.");
+                this.textViewBluetoothStatusValue.setText("disconnected");
+                this.textViewBluetoothStatusValue.setTextColor(Color.RED);
                 try {
-                    this.outStream = this.btSocket.getOutputStream();
+                    mmDevice = this.mBluetoothAdapter.getRemoteDevice(btAddress);
+                    mmSocket = mmDevice.createRfcommSocketToServiceRecord(MY_UUID);
+                    this.mBluetoothAdapter.cancelDiscovery();
+                    this.mmSocket.connect();
+                    this.mmOutputStream = this.mmSocket.getOutputStream();
+                    mmInputStream = mmSocket.getInputStream();
                     this.textViewBluetoothStatusValue.setText("connected");
                     this.textViewBluetoothStatusValue.setTextColor(Color.GREEN);
-                    return;
-                } catch (IOException localIOException4) {
-                    errorExit("Fatal Error", "In onResume() and output stream creation failed:" + localIOException4.getMessage() + ".");
+                } catch (IOException ex) {
+                    Log.e(TAG, ex.getMessage(), ex);
+                    Toast.makeText(MainActivity.this.getBaseContext(), "ERROR! 'initializeBluetooth'", Toast.LENGTH_LONG).show();
                 }
-            } catch (IOException localIOException2) {
-                for (; ; ) {
+            } else {
+                Intent enableBluetooth = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivityForResult(enableBluetooth, 0);
+            }
+
+        } else {
+            Log.e(TAG, "Bluetooth adapter is null.");
+        }
+    }
+
+    void addBluetoothDataListener() {
+        final Handler handler = new Handler();
+        final byte delimiter = 10; //This is the ASCII code for a newline character
+        stopWorker = false;
+        readBufferPosition = 0;
+        readBuffer = new byte[1024];
+        workerThread = new Thread(new Runnable() {
+            public void run() {
+                while (!Thread.currentThread().isInterrupted() && !stopWorker) {
                     try {
-                        this.btSocket.close();
-                    } catch (IOException localIOException3) {
-                        errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + localIOException3.getMessage() + ".");
+                        int bytesAvailable = mmInputStream.available();
+                        if (bytesAvailable > 0) {
+                            byte[] packetBytes = new byte[bytesAvailable];
+                            mmInputStream.read(packetBytes);
+                            for (int i = 0; i < bytesAvailable; i++) {
+                                byte b = packetBytes[i];
+                                if (b == delimiter) {
+                                    byte[] encodedBytes = new byte[readBufferPosition];
+                                    System.arraycopy(readBuffer, 0, encodedBytes, 0, encodedBytes.length);
+                                    final String data = new String(encodedBytes, "US-ASCII");
+                                    readBufferPosition = 0;
+
+                                    handler.post(new Runnable() {
+                                        public void run() {
+                                            textViewCurrentTempValue.setText(data + CELSIUS_DEGREE_NOTATION);
+                                        }
+                                    });
+                                } else {
+                                    readBuffer[readBufferPosition++] = b;
+                                }
+                            }
+                        }
+                    } catch (IOException ex) {
+                        stopWorker = true;
                     }
                 }
             }
-        } catch (IOException localIOException1) {
-            localIOException1 = localIOException1;
-            errorExit("Fatal Error", "In onResume() and socket create failed: " + localIOException1.getMessage() + ".");
-        }
+        });
+
+        workerThread.start();
+    }
+
+    void sendData(String data) throws IOException {
+        mmOutputStream.write(data.getBytes());
     }
 }
